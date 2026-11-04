@@ -89,6 +89,7 @@ AEGIS includes an interactive Streamlit application that allows users to:
 - Upload a CSV file for batch prediction.
 - Review prediction results through an interactive interface.
   
+  https://aegis-mobile-wallet-fraud-detection.streamlit.app/
 ### Application Preview
 
 ![AEGIS Application](screenshots/app_screenshot.png)
