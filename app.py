@@ -1,691 +1,506 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import altair as alt
 from pathlib import Path
 
-# -----------------------------
-# 1. Page Configuration
-# -----------------------------
+# =====================================================
+# 1. Page configuration
+# =====================================================
 st.set_page_config(
     page_title="AEGIS | Mobile Wallet Fraud Detection",
     page_icon="🛡️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-# -----------------------------
-# 2. Design Tokens + Global CSS
-# -----------------------------
-NAVY = "#0B1220"
-PANEL = "#111B2E"
-BORDER = "#1E2A44"
-BLUE = "#5B8DEF"
-TEAL = "#2DD4BF"
-RED = "#F25F5C"
-WHITE = "#F1F5F9"
-GRAY = "#94A3B8"
-
-CSS = """
+# =====================================================
+# 2. Styling (custom CSS only - no JavaScript)
+# =====================================================
+# Palette: Navy #0B1220 | Dark blue #111C30 | Blue #3B82F6 | Teal #14B8A6
+#          Red #EF4444 | Green #22C55E | Text #F1F5F9 / #94A3B8
+CUSTOM_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap');
-
-html, body, [class*="css"], .stApp {
-    font-family: 'IBM Plex Sans', 'Segoe UI', Tahoma, sans-serif;
-}
-.stApp { background: #0B1220; color: #F1F5F9; }
+.stApp { background-color: #0B1220; color: #F1F5F9; }
 header[data-testid="stHeader"] { background: transparent; }
-.block-container { padding-top: 1.6rem; padding-bottom: 3rem; max-width: 1280px; }
+#MainMenu, footer { visibility: hidden; }
+.block-container { padding-top: 2rem; padding-bottom: 3rem; max-width: 1200px; }
 
 /* Sidebar */
 section[data-testid="stSidebar"] {
-    background: #0E1729;
-    border-right: 1px solid #1E2A44;
+    background-color: #111C30;
+    border-right: 1px solid #1F2D4A;
 }
-section[data-testid="stSidebar"] h2,
-section[data-testid="stSidebar"] h3 { color: #F1F5F9; font-size: 1.05rem; }
-section[data-testid="stSidebar"] label p { color: #94A3B8; }
+.aegis-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.aegis-brand-name { font-size: 1.35rem; font-weight: 700; color: #F1F5F9; line-height: 1.1; }
+.aegis-brand-sub { color: #94A3B8; font-size: 0.82rem; }
+.aegis-desc { color: #94A3B8; font-size: 0.88rem; margin: 10px 0 18px 0; }
 
-/* Headings & text */
-h1, h2, h3, h4 { color: #F1F5F9; letter-spacing: -0.01em; }
-p, li, label, span { color: inherit; }
-hr { border-color: #1E2A44 !important; }
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 4px;
-    border-bottom: 1px solid #1E2A44;
-}
-.stTabs [data-baseweb="tab"] {
-    height: 46px;
-    padding: 0 18px;
-    color: #94A3B8;
-    background: transparent;
-    border-radius: 8px 8px 0 0;
-}
-.stTabs [aria-selected="true"] { color: #F1F5F9 !important; }
-.stTabs [data-baseweb="tab-highlight"] { background-color: #5B8DEF; }
-
-/* Form panel */
-div[data-testid="stForm"] {
-    background: #111B2E;
-    border: 1px solid #1E2A44;
+/* Cards: any container created with key="card_*" */
+[class*="st-key-card"] {
+    background-color: #111C30;
+    border: 1px solid #1F2D4A;
     border-radius: 14px;
-    padding: 1.4rem 1.4rem 1rem 1.4rem;
+    padding: 1.1rem 1.25rem;
+}
+[data-testid="stForm"] {
+    background-color: #111C30;
+    border: 1px solid #1F2D4A;
+    border-radius: 14px;
+    padding: 1.25rem;
 }
 
-/* Inputs */
-div[data-baseweb="input"], div[data-baseweb="select"] > div, div[data-baseweb="base-input"] {
-    background-color: #0B1220 !important;
-    border-color: #1E2A44 !important;
-    border-radius: 8px !important;
-}
-input { color: #F1F5F9 !important; }
-.stNumberInput button { background: #14203A; color: #94A3B8; }
+/* Metrics */
+[data-testid="stMetricLabel"] p { color: #94A3B8; font-size: 0.85rem; }
+[data-testid="stMetricValue"] { color: #F1F5F9; font-weight: 700; }
 
 /* Buttons */
 .stButton > button, .stFormSubmitButton > button, .stDownloadButton > button {
-    background: #5B8DEF;
-    color: #0B1220;
-    font-weight: 600;
-    border: none;
-    border-radius: 8px;
-    padding: 0.6rem 1.2rem;
+    background-color: #3B82F6; color: #FFFFFF; border: none;
+    border-radius: 8px; font-weight: 600; padding: 0.55rem 1.1rem;
 }
 .stButton > button:hover, .stFormSubmitButton > button:hover, .stDownloadButton > button:hover {
-    background: #7AA3F5;
-    color: #0B1220;
-    border: none;
+    background-color: #2563EB; color: #FFFFFF; border: none;
 }
 
-/* File uploader */
-div[data-testid="stFileUploader"] section {
-    background: #111B2E;
-    border: 1px dashed #2A3A5E;
-    border-radius: 14px;
-}
-div[data-testid="stFileUploader"] small, div[data-testid="stFileUploader"] span { color: #94A3B8; }
+/* Result cards */
+.aegis-result { border-radius: 14px; padding: 1.25rem 1.4rem; border: 1px solid; margin: 0.5rem 0 1rem 0; }
+.aegis-result.fraud { background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.55); }
+.aegis-result.legit { background: rgba(34,197,94,0.10); border-color: rgba(34,197,94,0.55); }
+.aegis-result-title { font-size: 1.4rem; font-weight: 700; margin: 0; }
+.aegis-result.fraud .aegis-result-title { color: #EF4444; }
+.aegis-result.legit .aegis-result-title { color: #22C55E; }
+.aegis-result-text { color: #CBD5E1; margin: 6px 0 0 0; font-size: 0.95rem; }
 
-/* Dataframe */
-div[data-testid="stDataFrame"] {
-    border: 1px solid #1E2A44;
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-/* Alerts */
-div[data-testid="stAlert"] { border-radius: 10px; }
-
-/* Custom components */
-.ae-header {
-    display: flex; align-items: center; gap: 16px;
-    padding: 18px 22px;
-    background: linear-gradient(135deg, #111B2E 0%, #0E1729 100%);
-    border: 1px solid #1E2A44;
-    border-radius: 16px;
-    margin-bottom: 1.2rem;
-}
-.ae-logo {
-    width: 52px; height: 52px; flex: none;
-    display: flex; align-items: center; justify-content: center;
-    background: #14203A; border: 1px solid #2A3A5E; border-radius: 12px;
-}
-.ae-title { font-size: 1.6rem; font-weight: 700; color: #F1F5F9; line-height: 1.1; }
-.ae-tag { color: #94A3B8; font-size: 0.95rem; margin-top: 4px; }
-.ae-pill {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 8px;
-    padding: 6px 14px; border-radius: 999px;
-    background: rgba(45,212,191,0.10); color: #2DD4BF;
-    border: 1px solid rgba(45,212,191,0.35);
-    font-size: 0.85rem; font-weight: 500; white-space: nowrap;
-}
-.ae-dot { width: 8px; height: 8px; border-radius: 50%; background: #2DD4BF; }
-
-.ae-section { font-size: 1.15rem; font-weight: 600; color: #F1F5F9; margin: 0.4rem 0 0.2rem 0; }
-.ae-sub { color: #94A3B8; font-size: 0.92rem; margin-bottom: 1rem; }
-
-.ae-kpi {
-    background: #111B2E; border: 1px solid #1E2A44; border-radius: 14px;
-    padding: 18px 20px; height: 100%;
-    border-left-width: 3px;
-}
-.ae-kpi.blue { border-left-color: #5B8DEF; }
-.ae-kpi.teal { border-left-color: #2DD4BF; }
-.ae-kpi.red  { border-left-color: #F25F5C; }
-.ae-kpi.gray { border-left-color: #3A4A6E; }
-.ae-kpi-label { color: #94A3B8; font-size: 0.85rem; }
-.ae-kpi-value { color: #F1F5F9; font-size: 1.9rem; font-weight: 700; margin-top: 4px; line-height: 1.15; }
-.ae-kpi-note { color: #94A3B8; font-size: 0.8rem; margin-top: 4px; }
-
-.ae-card {
-    background: #111B2E; border: 1px solid #1E2A44; border-radius: 14px;
-    padding: 20px 22px;
-}
-.ae-card-title { font-size: 1rem; font-weight: 600; color: #F1F5F9; margin-bottom: 10px; }
-
-.ae-steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-.ae-step { background: #0E1729; border: 1px solid #1E2A44; border-radius: 12px; padding: 16px; }
-.ae-step b { color: #F1F5F9; display: block; margin-bottom: 4px; }
-.ae-step span { color: #94A3B8; font-size: 0.88rem; }
-
-.ae-result {
-    border-radius: 14px; padding: 22px 24px;
-    border: 1px solid; display: flex; align-items: center; gap: 18px;
-}
-.ae-result.fraud { background: rgba(242,95,92,0.10); border-color: rgba(242,95,92,0.5); }
-.ae-result.safe  { background: rgba(45,212,191,0.08); border-color: rgba(45,212,191,0.45); }
-.ae-result-icon { font-size: 2rem; }
-.ae-result-title { font-size: 1.25rem; font-weight: 700; }
-.ae-result.fraud .ae-result-title { color: #F25F5C; }
-.ae-result.safe .ae-result-title { color: #2DD4BF; }
-.ae-result-sub { color: #94A3B8; font-size: 0.9rem; margin-top: 2px; }
-
-.ae-gauge { margin-top: 18px; }
-.ae-gauge-track {
-    position: relative; height: 12px; border-radius: 999px;
-    background: #1A2640; overflow: visible;
-}
-.ae-gauge-fill { height: 100%; border-radius: 999px; }
-.ae-gauge-mark {
-    position: absolute; top: -5px; width: 2px; height: 22px; background: #F1F5F9;
-}
-.ae-gauge-labels {
-    display: flex; justify-content: space-between;
-    color: #94A3B8; font-size: 0.78rem; margin-top: 8px;
-}
-
-.ae-empty {
-    background: #111B2E; border: 1px dashed #2A3A5E; border-radius: 14px;
-    padding: 28px; text-align: center; color: #94A3B8;
-}
-.ae-footer { text-align: center; color: #5E6E8F; font-size: 0.8rem; margin-top: 2.5rem; }
-
-@media (max-width: 800px) {
-    .ae-steps { grid-template-columns: 1fr; }
-    .ae-header { flex-wrap: wrap; }
-    .ae-pill { margin-left: 0; }
+/* Typography helpers */
+.aegis-hero-title { font-size: 2.2rem; font-weight: 700; margin: 0; color: #F1F5F9; }
+.aegis-hero-sub { color: #94A3B8; font-size: 1.02rem; margin-top: 6px; }
+.aegis-muted { color: #94A3B8; }
+.aegis-pill {
+    display: inline-block; padding: 3px 12px; border-radius: 999px; font-size: 0.8rem;
+    background: rgba(20,184,166,0.12); color: #14B8A6; border: 1px solid rgba(20,184,166,0.4);
 }
 </style>
 """
-st.markdown(CSS, unsafe_allow_html=True)
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
+LOGO_SVG = """
+<svg width="36" height="36" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 2.5 4.5 5.5v5.8c0 4.5 3.1 8.6 7.5 10.2 4.4-1.6 7.5-5.7 7.5-10.2V5.5L12 2.5Z"
+ fill="#3B82F6" fill-opacity="0.18" stroke="#3B82F6" stroke-width="1.6" stroke-linejoin="round"/>
+<path d="m8.6 12.2 2.4 2.4 4.4-4.8" stroke="#14B8A6" stroke-width="1.8"
+ stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+"""
 
-def html(block: str):
-    """Render an HTML block (strips indentation so Markdown doesn't treat it as code)."""
-    cleaned = "\n".join(l.strip() for l in block.splitlines() if l.strip())
-    st.markdown(cleaned, unsafe_allow_html=True)
-
-
-def kpi(label: str, value: str, note: str = "", tone: str = "blue"):
-    return (
-        f'<div class="ae-kpi {tone}">'
-        f'<div class="ae-kpi-label">{label}</div>'
-        f'<div class="ae-kpi-value">{value}</div>'
-        f'<div class="ae-kpi-note">{note}</div>'
-        f'</div>'
-    )
-
-
-def style_chart(chart, height=280):
-    return (
-        chart.properties(height=height, background="transparent")
-        .configure_view(strokeWidth=0)
-        .configure_axis(
-            labelColor=GRAY, titleColor=GRAY,
-            gridColor=BORDER, domainColor=BORDER, tickColor=BORDER
-        )
-        .configure_legend(labelColor=GRAY, titleColor=GRAY)
-    )
-
-
-# -----------------------------
-# 3. Load Saved Model (unchanged)
-# -----------------------------
+# =====================================================
+# 3. Load saved model (path and bundle keys unchanged)
+# =====================================================
 BASE_DIR = Path(__file__).resolve().parent
 MODEL_PATH = BASE_DIR / "models" / "fraud_detection_pipeline.joblib"
 
-bundle = joblib.load(MODEL_PATH)
 
-model = bundle["model"]
-default_threshold = float(bundle["threshold"])
-features = bundle["features"]
+@st.cache_resource(show_spinner="Loading fraud detection model...")
+def load_bundle(path: Path):
+    return joblib.load(path)
 
-numeric_features = [
-    "step",
-    "amount",
-    "oldbalanceOrg",
-    "oldbalanceDest"
+
+try:
+    bundle = load_bundle(MODEL_PATH)
+    model = bundle["model"]
+    default_threshold = float(bundle["threshold"])
+    features = bundle["features"]
+except FileNotFoundError:
+    st.error(
+        "Model file not found. Make sure "
+        "`models/fraud_detection_pipeline.joblib` exists next to `app.py`."
+    )
+    st.stop()
+except Exception as error:
+    st.error(f"The model could not be loaded: {error}")
+    st.stop()
+
+# Same numeric columns the original app coerced for batch input
+NUMERIC_FEATURES = [
+    c for c in ["step", "amount", "oldbalanceOrg", "oldbalanceDest"] if c in features
 ]
-categorical_features = [c for c in features if c not in numeric_features]
+TRANSACTION_TYPES = ["CASH_OUT", "TRANSFER", "CASH_IN", "PAYMENT", "DEBIT"]
 
-# -----------------------------
-# 4. Professional Header
-# -----------------------------
-html("""
-<div class="ae-header">
-  <div class="ae-logo">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2.5 4.5 5.5v5.8c0 4.5 3.1 8.6 7.5 10.2 4.4-1.6 7.5-5.7 7.5-10.2V5.5L12 2.5Z" fill="#5B8DEF" fill-opacity="0.18" stroke="#5B8DEF" stroke-width="1.6" stroke-linejoin="round"/>
-      <path d="m8.6 12.2 2.4 2.4 4.4-4.8" stroke="#2DD4BF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-  </div>
-  <div>
-    <div class="ae-title">AEGIS</div>
-    <div class="ae-tag">Intelligent protection for mobile wallet transactions</div>
-  </div>
-  <div class="ae-pill"><span class="ae-dot"></span>Model active</div>
-</div>
-""")
+# Project-reported evaluation results (provided by the project author)
+REPORTED_METRICS = {
+    "Precision": "89.39%",
+    "Recall": "60.50%",
+    "F1-score": "72.05%",
+    "Average Precision": "0.7424",
+}
 
-# -----------------------------
-# 5. Threshold Slider (unchanged logic)
-# -----------------------------
-st.sidebar.header("Model Settings")
+PAGES = [
+    "Dashboard",
+    "Single Transaction Analysis",
+    "Batch CSV Analysis",
+    "About the Model",
+]
 
-threshold = st.sidebar.slider(
-    "Fraud Detection Threshold",
-    min_value=0.0,
-    max_value=1.0,
-    value=default_threshold,
-    step=0.05
-)
+if "nav" not in st.session_state:
+    st.session_state["nav"] = PAGES[0]
 
-st.sidebar.info(
-    f"Current Threshold: {threshold:.2f}"
-)
 
-st.sidebar.caption(
-    "Lower values flag more transactions (higher recall). "
-    "Higher values flag fewer (higher precision)."
-)
+def go_to(page: str):
+    """Button callback used to jump between pages."""
+    st.session_state["nav"] = page
 
-# -----------------------------
-# 6. Tabs
-# -----------------------------
-tab_overview, tab_single, tab_batch, tab_analytics = st.tabs(
-    ["Overview", "Single Transaction", "Batch Prediction", "Visual Analytics"]
-)
 
-# ======================================================
-# Single Transaction (logic unchanged)
-# ======================================================
-with tab_single:
-    html("""
-    <div class="ae-section">Analyze a single transaction</div>
-    <div class="ae-sub">Enter the transaction details and AEGIS will estimate the fraud probability.</div>
-    """)
+# =====================================================
+# 4. Sidebar: brand, navigation, decision threshold
+# =====================================================
+with st.sidebar:
+    st.markdown(
+        f"""
+        <div class="aegis-brand">{LOGO_SVG}
+        <div><div class="aegis-brand-name">AEGIS</div>
+        <div class="aegis-brand-sub">Mobile Wallet Fraud Detection</div></div></div>
+        <div class="aegis-desc">Machine-learning protection that scores mobile wallet
+        transactions for fraud risk.</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.radio(
+        "Navigation",
+        PAGES,
+        key="nav",
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+
+    with st.expander("Decision threshold", expanded=False):
+        threshold = st.slider(
+            "Fraud Detection Threshold",
+            min_value=0.0,
+            max_value=1.0,
+            value=default_threshold,
+            step=0.05,
+            help="A transaction is flagged as fraud when its probability "
+                 "is greater than or equal to this value.",
+        )
+        st.caption(
+            f"Model default: {default_threshold:.2f}. "
+            "Higher values flag fewer transactions; lower values flag more."
+        )
+
+
+# =====================================================
+# 5. Shared helpers
+# =====================================================
+def result_card(is_fraud: bool, probability: float):
+    """Colored card that clearly distinguishes FRAUD from LEGITIMATE."""
+    if is_fraud:
+        css, title = "fraud", "FRAUD - Potential fraudulent transaction"
+        text = (
+            f"The model estimates a {probability:.2%} probability of fraud, which is at or above "
+            f"the decision threshold of {threshold:.2f}. This transaction should be reviewed "
+            "before it is approved."
+        )
+    else:
+        css, title = "legit", "LEGITIMATE - Transaction looks normal"
+        text = (
+            f"The model estimates a {probability:.2%} probability of fraud, which is below "
+            f"the decision threshold of {threshold:.2f}. No strong fraud pattern was found. "
+            "A prediction is an estimate, not a guarantee."
+        )
+    st.markdown(
+        f'<div class="aegis-result {css}"><p class="aegis-result-title">{title}</p>'
+        f'<p class="aegis-result-text">{text}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def page_header(title: str, subtitle: str):
+    st.markdown(f'<p class="aegis-hero-title">{title}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="aegis-hero-sub">{subtitle}</p>', unsafe_allow_html=True)
+    st.write("")
+
+
+# =====================================================
+# 6. Pages
+# =====================================================
+def render_dashboard():
+    with st.container(key="card_hero"):
+        st.markdown('<span class="aegis-pill">Model loaded and ready</span>', unsafe_allow_html=True)
+        st.markdown('<p class="aegis-hero-title" style="margin-top:10px;">Welcome to AEGIS</p>',
+                    unsafe_allow_html=True)
+        st.markdown(
+            '<p class="aegis-hero-sub">AEGIS analyzes mobile wallet transactions with a trained '
+            "Random Forest model and estimates the probability that each one is fraudulent. "
+            "Check a single transaction or screen an entire CSV file in seconds.</p>",
+            unsafe_allow_html=True,
+        )
+        b1, b2, _ = st.columns([1, 1, 2])
+        b1.button("Analyze a transaction", on_click=go_to,
+                  args=("Single Transaction Analysis",), width="stretch")
+        b2.button("Upload a CSV file", on_click=go_to,
+                  args=("Batch CSV Analysis",), width="stretch")
+
+    st.write("")
+    st.subheader("System overview")
+
+    summary = st.session_state.get("batch_summary")
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1, st.container(key="card_m1"):
+        st.metric("Model status", "Active")
+    with c2, st.container(key="card_m2"):
+        st.metric("Decision threshold", f"{threshold:.2f}")
+    with c3, st.container(key="card_m3"):
+        st.metric("Input features", len(features))
+    with c4, st.container(key="card_m4"):
+        st.metric("Transactions analyzed (this session)",
+                  f"{summary['total']:,}" if summary else "None yet")
+
+    if summary:
+        st.write("")
+        st.subheader("Latest batch result")
+        st.caption(f"File: {summary['file']} - threshold used: {summary['threshold']:.2f}")
+        d1, d2, d3, d4 = st.columns(4)
+        with d1, st.container(key="card_b1"):
+            st.metric("Total transactions", f"{summary['total']:,}")
+        with d2, st.container(key="card_b2"):
+            st.metric("Predicted fraud", f"{summary['fraud']:,}")
+        with d3, st.container(key="card_b3"):
+            st.metric("Legitimate", f"{summary['legit']:,}")
+        with d4, st.container(key="card_b4"):
+            rate = summary["fraud"] / summary["total"] if summary["total"] else 0
+            st.metric("Flagged share", f"{rate:.2%}")
+    else:
+        st.caption("Batch statistics appear here after you analyze a CSV file. "
+                   "No figures are shown until real predictions exist.")
+
+    st.write("")
+    st.subheader("How detection works")
+    s1, s2, s3 = st.columns(3)
+    steps = [
+        ("1. Provide transaction data",
+         "Enter one transaction manually or upload a CSV file containing the required columns."),
+        ("2. The model scores it",
+         "A Random Forest pipeline converts the inputs and estimates a fraud probability between 0% and 100%."),
+        ("3. The threshold decides",
+         "If the probability reaches the decision threshold, the transaction is flagged as fraud for review."),
+    ]
+    for col, (title, text), idx in zip((s1, s2, s3), steps, range(3)):
+        with col, st.container(key=f"card_step{idx}"):
+            st.markdown(f"**{title}**")
+            st.markdown(f'<span class="aegis-muted">{text}</span>', unsafe_allow_html=True)
+
+
+def render_single():
+    page_header("Single Transaction Analysis",
+                "Enter the transaction details to estimate its fraud probability.")
 
     with st.form("transaction_form"):
-
         col1, col2 = st.columns(2)
 
         with col1:
-            transaction_type = st.selectbox(
-                "Transaction Type",
-                ["CASH_OUT", "TRANSFER", "CASH_IN",
-                 "PAYMENT", "DEBIT"]
-            )
-
+            transaction_type = st.selectbox("Transaction Type", TRANSACTION_TYPES)
             amount = st.number_input(
-                "Transaction Amount",
-                min_value=0.0,
-                value=10000.0
-            )
-
+                "Transaction Amount", min_value=0.0, value=10000.0,
+                help="Amount transferred in this transaction.")
             oldbalance_org = st.number_input(
-                "Sender's Old Balance",
-                min_value=0.0,
-                value=20000.0
-            )
+                "Origin Account Balance Before Transaction", min_value=0.0, value=20000.0,
+                help="Sender's balance before the transaction.")
 
         with col2:
             step = st.number_input(
-                "Transaction Time Step",
-                min_value=1,
-                value=100
-            )
-
+                "Transaction Step", min_value=1, value=100, step=1,
+                help="Time step (hour) of the transaction in the dataset's timeline.")
             oldbalance_dest = st.number_input(
-                "Receiver's Old Balance",
-                min_value=0.0,
-                value=5000.0
-            )
+                "Destination Account Balance Before Transaction", min_value=0.0, value=5000.0,
+                help="Receiver's balance before the transaction.")
 
-        submitted = st.form_submit_button(
-            "Analyze Transaction",
-            use_container_width=True
-        )
+        submitted = st.form_submit_button("Predict Transaction", width="stretch")
 
-    if submitted:
+    if not submitted:
+        return
 
+    try:
+        # Column order must match the order used during training
         transaction = pd.DataFrame(
-            [[
-                step,
-                transaction_type,
-                amount,
-                oldbalance_org,
-                oldbalance_dest
-            ]],
-            columns=features
+            [[step, transaction_type, amount, oldbalance_org, oldbalance_dest]],
+            columns=features,
         )
-
-        probability = model.predict_proba(
-            transaction
-        )[0, 1]
-
+        probability = float(model.predict_proba(transaction)[0, 1])
         prediction = int(probability >= threshold)
+    except Exception as error:
+        st.error(f"The prediction could not be completed: {error}")
+        return
 
-        st.write("")
-        if prediction == 1:
-            tone, icon, title = "fraud", "⚠️", "Potential Fraud Detected"
-            sub = "This transaction scored above the active threshold. Review before approving."
-            bar_color = RED
-        else:
-            tone, icon, title = "safe", "✅", "Transaction Classified as Normal"
-            sub = "This transaction scored below the active threshold."
-            bar_color = TEAL
+    st.subheader("Prediction result")
+    result_card(prediction == 1, probability)
 
-        html(f"""
-        <div class="ae-result {tone}">
-          <div class="ae-result-icon">{icon}</div>
-          <div>
-            <div class="ae-result-title">{title}</div>
-            <div class="ae-result-sub">{sub}</div>
-          </div>
-        </div>
-        """)
+    m1, m2, m3 = st.columns(3)
+    with m1, st.container(key="card_r1"):
+        st.metric("Fraud probability", f"{probability:.2%}")
+    with m2, st.container(key="card_r2"):
+        st.metric("Decision threshold", f"{threshold:.2f}")
+    with m3, st.container(key="card_r3"):
+        st.metric("Classification", "FRAUD" if prediction == 1 else "LEGITIMATE")
 
-        st.write("")
-        m1, m2, m3 = st.columns(3)
-        m1.markdown(
-            kpi("Fraud Probability", f"{probability:.2%}",
-                "Model confidence", "red" if prediction == 1 else "teal"),
-            unsafe_allow_html=True
-        )
-        m2.markdown(
-            kpi("Active Threshold", f"{threshold:.2f}",
-                "Adjust in the sidebar", "blue"),
-            unsafe_allow_html=True
-        )
-        m3.markdown(
-            kpi("Decision", "Fraud" if prediction == 1 else "Normal",
-                "Probability vs. threshold",
-                "red" if prediction == 1 else "teal"),
-            unsafe_allow_html=True
-        )
+    st.progress(min(max(probability, 0.0), 1.0))
 
-        html(f"""
-        <div class="ae-card ae-gauge" style="margin-top:16px;">
-          <div class="ae-card-title">Risk level</div>
-          <div class="ae-gauge-track">
-            <div class="ae-gauge-fill" style="width:{float(probability) * 100:.1f}%; background:{bar_color};"></div>
-            <div class="ae-gauge-mark" style="left:{threshold * 100:.1f}%;"></div>
-          </div>
-          <div class="ae-gauge-labels">
-            <span>0%</span>
-            <span>Threshold {threshold:.0%}</span>
-            <span>100%</span>
-          </div>
-        </div>
-        """)
 
-# ======================================================
-# Batch Prediction (logic unchanged; results kept for Overview/Analytics)
-# ======================================================
-results = None
-predictions = None
+def render_batch():
+    page_header("Batch CSV Analysis",
+                "Upload a CSV file to screen many transactions at once.")
 
-with tab_batch:
-    html("""
-    <div class="ae-section">Analyze multiple transactions</div>
-    <div class="ae-sub">Upload a CSV file containing the required transaction features.</div>
-    """)
+    with st.container(key="card_req"):
+        st.markdown("**Required columns**")
+        st.code(", ".join(features), language=None)
+        st.caption("Extra columns are allowed and are kept in the downloadable results.")
 
-    html(f"""
-    <div class="ae-card" style="margin-bottom:14px;">
-      <div class="ae-card-title">Required columns</div>
-      <div class="ae-sub" style="margin-bottom:0;">{", ".join(features)}</div>
-    </div>
-    """)
+    uploaded_file = st.file_uploader("Upload Transactions CSV", type=["csv"])
 
-    uploaded_file = st.file_uploader(
-        "Upload Transactions CSV",
-        type=["csv"]
+    if uploaded_file is None:
+        return
+
+    try:
+        uploaded_df = pd.read_csv(uploaded_file)
+    except pd.errors.EmptyDataError:
+        st.error("The uploaded file is empty.")
+        return
+    except Exception as error:
+        st.error(f"The file could not be read as a CSV: {error}")
+        return
+
+    if uploaded_df.empty:
+        st.error("The uploaded file has headers but no transaction rows.")
+        return
+
+    st.subheader("Data preview")
+    st.caption(f"{len(uploaded_df):,} rows, {len(uploaded_df.columns)} columns. Showing the first 10 rows.")
+    st.dataframe(uploaded_df.head(10), width="stretch")
+
+    # ---- Validation (same rules as the original app) ----
+    missing_features = [c for c in features if c not in uploaded_df.columns]
+    if missing_features:
+        st.error(f"Missing required columns: {missing_features}")
+        return
+
+    batch_data = uploaded_df[features].copy()
+    for col in NUMERIC_FEATURES:
+        batch_data[col] = pd.to_numeric(batch_data[col], errors="coerce")
+
+    if batch_data.isnull().any().any():
+        st.error("The uploaded file contains missing or invalid feature values.")
+        return
+
+    if (batch_data[NUMERIC_FEATURES] < 0).any().any():
+        st.error("Numeric transaction features cannot be negative.")
+        return
+
+    # ---- Prediction ----
+    try:
+        probabilities = model.predict_proba(batch_data)[:, 1]
+        predictions = (probabilities >= threshold).astype(int)
+    except Exception as error:
+        st.error(f"The predictions could not be completed: {error}")
+        return
+
+    results = uploaded_df.copy()
+    results["Fraud_Probability"] = probabilities
+    results["Prediction"] = ["Fraud" if p == 1 else "Normal" for p in predictions]
+
+    total = len(results)
+    fraud_count = int(predictions.sum())
+    st.session_state["batch_summary"] = {
+        "file": uploaded_file.name,
+        "total": total,
+        "fraud": fraud_count,
+        "legit": total - fraud_count,
+        "threshold": threshold,
+    }
+
+    st.success("Batch analysis completed!")
+
+    m1, m2, m3 = st.columns(3)
+    with m1, st.container(key="card_t1"):
+        st.metric("Total transactions", f"{total:,}")
+    with m2, st.container(key="card_t2"):
+        st.metric("Predicted fraud cases", f"{fraud_count:,}")
+    with m3, st.container(key="card_t3"):
+        st.metric("Legitimate cases", f"{total - fraud_count:,}")
+
+    st.write("")
+    st.subheader("Prediction results")
+    only_fraud = st.toggle("Show only flagged transactions", value=False)
+    view = results[results["Prediction"] == "Fraud"] if only_fraud else results
+    st.caption(f"Showing up to 100 of {len(view):,} rows. The download contains all rows.")
+    st.dataframe(view.head(100), width="stretch")
+
+    csv_output = results.to_csv(index=False).encode("utf-8-sig")
+    st.download_button(
+        "Download Prediction Results",
+        data=csv_output,
+        file_name="fraud_detection_results.csv",
+        mime="text/csv",
     )
 
-    if uploaded_file is not None:
 
-        try:
-            uploaded_df = pd.read_csv(uploaded_file)
+def render_about():
+    page_header("About the Model",
+                "How AEGIS makes its decisions and how well it performed.")
 
-            missing_features = [
-                col for col in features
-                if col not in uploaded_df.columns
-            ]
+    c1, c2 = st.columns(2)
+    with c1, st.container(key="card_about1"):
+        st.markdown("**Algorithm**")
+        st.write("Random Forest Classifier inside a preprocessing pipeline.")
+    with c2, st.container(key="card_about2"):
+        st.markdown("**Problem type**")
+        st.write("Imbalanced binary classification: fraud is rare compared with legitimate transactions.")
 
-            if missing_features:
-                st.error(
-                    f"Missing required columns: {missing_features}"
-                )
+    st.write("")
+    st.subheader("Reported evaluation metrics")
+    st.caption("Results reported by the project; they are not recalculated by this app.")
+    cols = st.columns(4)
+    for col, (name, value), idx in zip(cols, REPORTED_METRICS.items(), range(4)):
+        with col, st.container(key=f"card_metric{idx}"):
+            st.metric(name, value)
 
-            else:
-                batch_data = uploaded_df[features].copy()
+    st.write("")
+    st.subheader("What the metrics mean for fraud detection")
+    p, r = st.columns(2)
+    with p, st.container(key="card_prec"):
+        st.markdown("**Precision: how trustworthy an alert is**")
+        st.write(
+            "Of all transactions the model flags as fraud, precision is the share that really "
+            "are fraud. A precision of 89.39% means roughly 89 of every 100 alerts are genuine, "
+            "so few legitimate customers are disturbed by false alarms."
+        )
+    with r, st.container(key="card_rec"):
+        st.markdown("**Recall: how much fraud is caught**")
+        st.write(
+            "Of all real fraud cases, recall is the share the model detects. A recall of 60.50% "
+            "means roughly 60 of every 100 fraudulent transactions are caught, and the rest are missed."
+        )
+    st.info(
+        "F1-score balances precision and recall. Average Precision summarizes the "
+        "precision-recall trade-off across all thresholds. The strict decision threshold "
+        f"(default {default_threshold:.2f}) favors precision: fewer false alarms, at the cost of "
+        "missing some fraud. Lowering it in the sidebar catches more fraud but raises false alarms."
+    )
 
-                for col in numeric_features:
-                    batch_data[col] = pd.to_numeric(
-                        batch_data[col],
-                        errors="coerce"
-                    )
+    st.write("")
+    st.subheader("Model inputs")
+    st.write("The model expects these features, in this order:")
+    st.code(", ".join(features), language=None)
 
-                if batch_data.isnull().any().any():
-                    st.error(
-                        "The uploaded file contains missing "
-                        "or invalid feature values."
-                    )
 
-                elif (batch_data[numeric_features] < 0).any().any():
-                    st.error(
-                        "Numeric transaction features cannot be negative."
-                    )
+# =====================================================
+# 7. Router
+# =====================================================
+PAGE_RENDERERS = {
+    "Dashboard": render_dashboard,
+    "Single Transaction Analysis": render_single,
+    "Batch CSV Analysis": render_batch,
+    "About the Model": render_about,
+}
 
-                else:
-                    probabilities = model.predict_proba(
-                        batch_data
-                    )[:, 1]
-
-                    predictions = (
-                        probabilities >= threshold
-                    ).astype(int)
-
-                    results = uploaded_df.copy()
-
-                    results["Fraud_Probability"] = probabilities
-                    results["Prediction"] = [
-                        "Fraud" if p == 1 else "Normal"
-                        for p in predictions
-                    ]
-
-                    st.success("Batch analysis completed!")
-
-                    b1, b2, b3 = st.columns(3)
-                    b1.markdown(
-                        kpi("Total Transactions", f"{len(results):,}",
-                            "Rows analyzed", "blue"),
-                        unsafe_allow_html=True
-                    )
-                    b2.markdown(
-                        kpi("Potential Fraud Cases", f"{int(predictions.sum()):,}",
-                            "Above threshold", "red"),
-                        unsafe_allow_html=True
-                    )
-                    b3.markdown(
-                        kpi("Normal Transactions",
-                            f"{len(results) - int(predictions.sum()):,}",
-                            "Below threshold", "teal"),
-                        unsafe_allow_html=True
-                    )
-
-                    st.write("")
-                    st.dataframe(
-                        results.head(100),
-                        use_container_width=True
-                    )
-
-                    csv_output = results.to_csv(
-                        index=False
-                    ).encode("utf-8-sig")
-
-                    st.download_button(
-                        "Download Prediction Results",
-                        data=csv_output,
-                        file_name="fraud_detection_results.csv",
-                        mime="text/csv"
-                    )
-
-        except Exception as error:
-            st.error(f"Error processing file: {error}")
-
-# ======================================================
-# Dashboard Overview
-# ======================================================
-with tab_overview:
-    html("""
-    <div class="ae-section">Dashboard overview</div>
-    <div class="ae-sub">A quick summary of the model and your latest batch analysis.</div>
-    """)
-
-    if results is None:
-        o1, o2, o3 = st.columns(3)
-        o1.markdown(kpi("Model status", "Ready", "Pipeline loaded", "teal"),
-                    unsafe_allow_html=True)
-        o2.markdown(kpi("Active threshold", f"{threshold:.2f}",
-                        f"Default {default_threshold:.2f}", "blue"),
-                    unsafe_allow_html=True)
-        o3.markdown(kpi("Input features", f"{len(features)}",
-                        "Used by the model", "gray"),
-                    unsafe_allow_html=True)
-
-        st.write("")
-        html("""
-        <div class="ae-card">
-          <div class="ae-card-title">How AEGIS works</div>
-          <div class="ae-steps">
-            <div class="ae-step"><b>Enter or upload</b><span>Type a single transaction, or upload a CSV with many.</span></div>
-            <div class="ae-step"><b>Score</b><span>The model estimates the probability that each transaction is fraud.</span></div>
-            <div class="ae-step"><b>Decide</b><span>Transactions above your threshold are flagged for review.</span></div>
-          </div>
-        </div>
-        """)
-    else:
-        total = len(results)
-        fraud_n = int(predictions.sum())
-        fraud_rate = fraud_n / total if total else 0
-        avg_prob = float(results["Fraud_Probability"].mean())
-
-        k1, k2, k3, k4 = st.columns(4)
-        k1.markdown(kpi("Total transactions", f"{total:,}",
-                        "Latest batch", "blue"), unsafe_allow_html=True)
-        k2.markdown(kpi("Flagged as fraud", f"{fraud_n:,}",
-                        "Above threshold", "red"), unsafe_allow_html=True)
-        k3.markdown(kpi("Fraud rate", f"{fraud_rate:.2%}",
-                        "Flagged / total", "red" if fraud_n else "teal"),
-                    unsafe_allow_html=True)
-        k4.markdown(kpi("Average risk", f"{avg_prob:.2%}",
-                        "Mean fraud probability", "gray"),
-                    unsafe_allow_html=True)
-
-        st.write("")
-        html('<div class="ae-section">Highest-risk transactions</div>')
-        top_risk = results.sort_values(
-            "Fraud_Probability", ascending=False
-        ).head(5)
-        st.dataframe(top_risk, use_container_width=True)
-
-# ======================================================
-# Visual Analytics
-# ======================================================
-with tab_analytics:
-    html("""
-    <div class="ae-section">Visual analytics</div>
-    <div class="ae-sub">How the latest batch breaks down by outcome, risk score and transaction type.</div>
-    """)
-
-    if results is None:
-        html("""
-        <div class="ae-empty">
-          No batch results yet. Upload a CSV in the Batch Prediction tab to see charts here.
-        </div>
-        """)
-    else:
-        chart_col1, chart_col2 = st.columns(2)
-
-        # Outcome split (donut)
-        with chart_col1:
-            html('<div class="ae-card-title">Outcome split</div>')
-            split = (
-                results["Prediction"].value_counts()
-                .reindex(["Normal", "Fraud"], fill_value=0)
-                .rename_axis("Prediction").reset_index(name="Count")
-            )
-            donut = alt.Chart(split).mark_arc(innerRadius=70, outerRadius=115).encode(
-                theta=alt.Theta("Count:Q"),
-                color=alt.Color(
-                    "Prediction:N",
-                    scale=alt.Scale(domain=["Normal", "Fraud"], range=[TEAL, RED]),
-                    legend=alt.Legend(title=None, orient="bottom")
-                ),
-                tooltip=["Prediction", "Count"]
-            )
-            st.altair_chart(style_chart(donut, 300),
-                            use_container_width=True, theme=None)
-
-        # Probability distribution
-        with chart_col2:
-            html('<div class="ae-card-title">Fraud probability distribution</div>')
-            hist = alt.Chart(results[["Fraud_Probability"]]).mark_bar(
-                color=BLUE, cornerRadiusTopLeft=3, cornerRadiusTopRight=3
-            ).encode(
-                x=alt.X("Fraud_Probability:Q",
-                        bin=alt.Bin(maxbins=20, extent=[0, 1]),
-                        title="Fraud probability"),
-                y=alt.Y("count()", title="Transactions"),
-                tooltip=[alt.Tooltip("count()", title="Transactions")]
-            )
-            rule = alt.Chart(pd.DataFrame({"t": [threshold]})).mark_rule(
-                color=RED, strokeDash=[5, 4], size=2
-            ).encode(x=alt.X("t:Q", scale=alt.Scale(domain=[0, 1])))
-            st.altair_chart(style_chart(hist + rule, 300),
-                            use_container_width=True, theme=None)
-
-        # Fraud by transaction type
-        if categorical_features:
-            type_col = categorical_features[0]
-            st.write("")
-            html(f'<div class="ae-card-title">Flagged transactions by {type_col}</div>')
-            by_type = (
-                results.assign(Flagged=predictions)
-                .groupby(type_col)
-                .agg(Transactions=("Flagged", "size"), Flagged=("Flagged", "sum"))
-                .reset_index()
-            )
-            by_type["Normal"] = by_type["Transactions"] - by_type["Flagged"]
-            long_df = by_type.melt(
-                id_vars=type_col, value_vars=["Normal", "Flagged"],
-                var_name="Outcome", value_name="Count"
-            )
-            bars = alt.Chart(long_df).mark_bar(
-                cornerRadiusTopLeft=3, cornerRadiusTopRight=3
-            ).encode(
-                x=alt.X(f"{type_col}:N", title=None, axis=alt.Axis(labelAngle=0)),
-                y=alt.Y("Count:Q", title="Transactions"),
-                color=alt.Color(
-                    "Outcome:N",
-                    scale=alt.Scale(domain=["Normal", "Flagged"], range=[TEAL, RED]),
-                    legend=alt.Legend(title=None, orient="bottom")
-                ),
-                tooltip=[type_col, "Outcome", "Count"]
-            )
-            st.altair_chart(style_chart(bars, 320),
-                            use_container_width=True, theme=None)
-
-html('<div class="ae-footer">AEGIS · Mobile Wallet Fraud Detection</div>')
+PAGE_RENDERERS[st.session_state["nav"]]()
