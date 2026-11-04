@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Dataset - Do not upload the original large dataset
+PS_20174392719_1491204439457_log.csv
+
+# System files
+.DS_Store
+Thumbs.db
